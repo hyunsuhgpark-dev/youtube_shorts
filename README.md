@@ -8,6 +8,13 @@ YouTube Shorts URL을 넣으면 **영상 제목·채널·자막을 자동 수집
 - 백엔드: Vercel Serverless Functions 2개 (`api/generate.js`, `api/records.js`)
 - DB: Neon(Postgres), 테이블 1개 (`clip_records`)
 
+## 화면
+
+![서비스 화면](docs/screenshot.png)
+
+> 위 이미지는 예시 데이터로 재현한 데모 화면입니다. URL을 넣고 **분석 & 후보 생성**을 누르면
+> 상단에 추출 키워드·제목 후보·해시태그가 나오고, 채택안을 저장하면 하단 **채택 기록**에 쌓입니다.
+
 ---
 
 ## 동작 흐름
