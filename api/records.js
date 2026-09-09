@@ -6,7 +6,7 @@ module.exports = async (req, res) => {
   try {
     if (req.method === "GET") {
       const rows = await sql`
-        select id, video_info, chosen_title, chosen_hashtags, created_at
+        select id, source_url, keywords, video_info, chosen_title, chosen_hashtags, created_at
         from clip_records
         order by created_at desc
         limit 20`;
@@ -14,15 +14,16 @@ module.exports = async (req, res) => {
     }
 
     if (req.method === "POST") {
-      const { info, title, hashtags } = req.body || {};
-      if (!info || !title) {
-        return res.status(400).json({ error: "info, title은 필수입니다." });
+      const { url, keywords, info, title, hashtags } = req.body || {};
+      if (!title) {
+        return res.status(400).json({ error: "title은 필수입니다." });
       }
       const tags = Array.isArray(hashtags) ? hashtags.join(" ") : hashtags || "";
+      const kw = Array.isArray(keywords) ? keywords.join(", ") : keywords || "";
       const rows = await sql`
-        insert into clip_records (video_info, chosen_title, chosen_hashtags)
-        values (${info}, ${title}, ${tags})
-        returning id, video_info, chosen_title, chosen_hashtags, created_at`;
+        insert into clip_records (source_url, keywords, video_info, chosen_title, chosen_hashtags)
+        values (${url || ""}, ${kw}, ${info || ""}, ${title}, ${tags})
+        returning id, source_url, keywords, video_info, chosen_title, chosen_hashtags, created_at`;
       return res.status(200).json({ record: rows[0] });
     }
 

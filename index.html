@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>클립 제목 생성기</title>
+<title>쇼츠 제목 생성기</title>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
@@ -18,6 +18,7 @@
     .card { background: #22262c !important; border-color: #33383f !important; }
     textarea, input { background: #1a1d22 !important; color: #e8e8e8 !important; border-color: #3a3f47 !important; }
     .chip { background: #2c313a !important; border-color: #3a3f47 !important; }
+    .kw { background: #2c313a !important; border-color: #3a3f47 !important; }
   }
   h1 { font-size: 20px; margin: 0 0 4px; }
   p.sub { margin: 0 0 20px; color: #888; font-size: 13px; }
@@ -26,16 +27,16 @@
     padding: 16px; margin-bottom: 16px;
   }
   label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px; }
-  textarea {
-    width: 100%; min-height: 90px; padding: 10px; border-radius: 8px;
-    border: 1px solid #d0d3d7; font: inherit; resize: vertical;
+  input[type=text], textarea {
+    width: 100%; padding: 10px; border-radius: 8px;
+    border: 1px solid #d0d3d7; font: inherit;
   }
+  textarea { min-height: 70px; resize: vertical; }
   button {
     font: inherit; font-weight: 600; cursor: pointer;
     border: 0; border-radius: 8px; padding: 10px 16px;
     background: #3b5bfd; color: #fff;
   }
-  button.secondary { background: #6b7280; }
   button:disabled { opacity: .5; cursor: default; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .titleopt { display: flex; gap: 8px; align-items: flex-start; padding: 8px 0; border-top: 1px solid #eee; }
@@ -47,31 +48,49 @@
     padding: 4px 10px; font-size: 13px; cursor: pointer; user-select: none;
   }
   .chip.on { background: #3b5bfd; border-color: #3b5bfd; color: #fff; }
+  .kw {
+    display: inline-block; background: #eef0f3; border: 1px solid #dfe2e6;
+    border-radius: 6px; padding: 3px 8px; font-size: 13px; margin: 0 6px 6px 0;
+  }
   .err { color: #d33; font-size: 13px; margin-top: 8px; }
+  .note { color: #999; font-size: 12px; margin-top: 6px; }
   .rec { border-top: 1px solid #eee; padding: 10px 0; font-size: 14px; }
   .rec:first-of-type { border-top: 0; }
   .rec .t { font-weight: 600; }
   .rec .h { color: #3b5bfd; font-size: 13px; }
-  .rec .m { color: #999; font-size: 12px; }
+  .rec .m { color: #999; font-size: 12px; word-break: break-all; }
+  .rec a { color: #3b5bfd; }
   .muted { color: #999; font-size: 13px; }
+  details summary { cursor: pointer; font-size: 13px; color: #666; }
 </style>
 </head>
 <body>
-  <h1>클립 제목 생성기</h1>
-  <p class="sub">영상 정보 입력 → 제목·해시태그 후보 생성 → 채택안 기록 (YouTube Shorts)</p>
+  <h1>쇼츠 제목 생성기</h1>
+  <p class="sub">YouTube Shorts URL 입력 → 영상 자막·제목 분석 → 핵심 키워드 + 제목·해시태그 후보 → 채택 기록</p>
 
   <div class="card">
-    <label for="info">영상 정보 · 핵심 키워드</label>
-    <textarea id="info" placeholder="예) 고양이가 처음 눈을 본 반응, 눈밭에서 점프, 웃긴 표정, 겨울 브이로그"></textarea>
+    <label for="url">YouTube Shorts URL</label>
+    <input type="text" id="url" placeholder="https://www.youtube.com/shorts/xxxxxxxxxxx" />
+
+    <details style="margin-top:10px">
+      <summary>자막을 못 가져올 때: 영상 내용 직접 입력 (선택)</summary>
+      <textarea id="manual" style="margin-top:8px" placeholder="영상에서 무슨 일이 있었는지, 핵심 대사나 상황을 적어주세요."></textarea>
+    </details>
+
     <div class="row" style="margin-top:10px">
-      <button id="genBtn" onclick="generate()">후보 생성</button>
+      <button id="genBtn" onclick="generate()">분석 & 후보 생성</button>
       <span id="genMsg" class="muted"></span>
     </div>
     <div id="genErr" class="err" hidden></div>
   </div>
 
   <div class="card" id="resultCard" hidden>
-    <label>제목 후보 (1개 선택)</label>
+    <div id="sourceInfo" class="note"></div>
+
+    <label style="margin-top:8px">추출된 핵심 키워드</label>
+    <div id="keywords"></div>
+
+    <label style="margin-top:14px">제목 후보 (1개 선택)</label>
     <div id="titles"></div>
 
     <label style="margin-top:14px">해시태그 후보 (클릭해서 선택/해제)</label>
@@ -90,28 +109,33 @@
   </div>
 
 <script>
-let lastInfo = "";
+let ctx = { url: "", title: "", keywords: [] };
 
 async function generate() {
-  const info = document.getElementById("info").value.trim();
+  const url = document.getElementById("url").value.trim();
+  const manualText = document.getElementById("manual").value.trim();
   const btn = document.getElementById("genBtn");
   const msg = document.getElementById("genMsg");
   const err = document.getElementById("genErr");
   err.hidden = true;
-  if (!info) { err.textContent = "영상 정보를 입력하세요."; err.hidden = false; return; }
+  if (!url && !manualText) { err.textContent = "URL을 입력하세요."; err.hidden = false; return; }
 
-  btn.disabled = true; msg.textContent = "생성 중…";
+  btn.disabled = true; msg.textContent = "분석 중… (자막 가져오는 데 몇 초 걸려요)";
   try {
     const r = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ info }),
+      body: JSON.stringify({ url, manualText }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "생성 실패");
 
-    lastInfo = info;
-    renderCandidates(data.titles || [], data.hashtags || []);
+    ctx = {
+      url,
+      title: (data.source && data.source.title) || manualText.slice(0, 120),
+      keywords: data.keywords || [],
+    };
+    renderResult(data);
     msg.textContent = "";
   } catch (e) {
     err.textContent = e.message; err.hidden = false;
@@ -121,22 +145,34 @@ async function generate() {
   }
 }
 
-function renderCandidates(titles, hashtags) {
+function renderResult(data) {
+  const s = data.source || {};
+  const parts = [];
+  if (s.title) parts.push("제목: " + s.title);
+  if (s.author) parts.push("채널: " + s.author);
+  parts.push(s.hasTranscript ? "자막 분석됨 ✓" : "자막 없음 (제목/입력만 사용)");
+  document.getElementById("sourceInfo").textContent = parts.join("  ·  ");
+
+  const kEl = document.getElementById("keywords");
+  kEl.innerHTML = (data.keywords || []).map((k) =>
+    '<span class="kw">' + escapeHtml(k) + "</span>"
+  ).join("") || '<span class="muted">키워드 없음</span>';
+
   const tEl = document.getElementById("titles");
   tEl.innerHTML = "";
-  titles.forEach((t, i) => {
+  (data.titles || []).forEach((t, i) => {
     const id = "title_" + i;
     const div = document.createElement("div");
     div.className = "titleopt";
     div.innerHTML =
-      '<input type="radio" name="title" id="' + id + '" value="' + encodeURIComponent(t) + '"' + (i === 0 ? " checked" : "") + '>' +
+      '<input type="radio" name="title" id="' + id + '" value="' + encodeURIComponent(t) + '"' + (i === 0 ? " checked" : "") + ">" +
       '<label for="' + id + '">' + escapeHtml(t) + "</label>";
     tEl.appendChild(div);
   });
 
   const hEl = document.getElementById("hashtags");
   hEl.innerHTML = "";
-  hashtags.forEach((h) => {
+  (data.hashtags || []).forEach((h) => {
     const chip = document.createElement("span");
     chip.className = "chip on";
     chip.textContent = h;
@@ -165,7 +201,7 @@ async function saveRecord() {
     const r = await fetch("/api/records", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ info: lastInfo, title, hashtags }),
+      body: JSON.stringify({ url: ctx.url, keywords: ctx.keywords, info: ctx.title, title, hashtags }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || "저장 실패");
@@ -191,7 +227,8 @@ async function loadRecords() {
       '<div class="rec">' +
       '<div class="t">' + escapeHtml(x.chosen_title) + "</div>" +
       (x.chosen_hashtags ? '<div class="h">' + escapeHtml(x.chosen_hashtags) + "</div>" : "") +
-      '<div class="m">' + escapeHtml(x.video_info) + "</div>" +
+      (x.keywords ? '<div class="m">키워드: ' + escapeHtml(x.keywords) + "</div>" : "") +
+      (x.source_url ? '<div class="m"><a href="' + escapeHtml(x.source_url) + '" target="_blank" rel="noopener">' + escapeHtml(x.source_url) + "</a></div>" : "") +
       '<div class="m">' + new Date(x.created_at).toLocaleString("ko-KR") + "</div>" +
       "</div>"
     ).join("");

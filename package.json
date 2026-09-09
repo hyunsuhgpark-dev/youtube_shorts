@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@neondatabase/serverless": "^0.9.4",
-    "openai": "^4.56.0"
+    "openai": "^4.56.0",
+    "youtube-transcript": "^1.2.1"
   }
 }
